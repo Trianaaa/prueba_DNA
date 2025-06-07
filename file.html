@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de CRM - Semana de Innovación</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #f1f5f9; /* slate-100 */
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 320px;
+            max-height: 320px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+                max-height: 350px;
+            }
+        }
+        .funnel-segment {
+            clip-path: polygon(0 0, 100% 0, 85% 100%, 15% 100%);
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        
+        <header class="mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-900">Tablero de Datos de CRM</h1>
+            <p class="text-slate-600 mt-2">Análisis interactivo del comportamiento y conversión de leads para la "Semana de Innovación en Marketing".</p>
+        </header>
+
+        <div class="bg-white p-4 rounded-lg shadow-md mb-8">
+            <h2 class="text-xl font-bold mb-4 text-slate-700">Filtros Globales</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="segment-filter" class="block text-sm font-medium text-slate-600 mb-2">Filtrar por Segmento de Lead</label>
+                    <select id="segment-filter" class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500">
+                        <option value="all">Todos los Segmentos</option>
+                        <option value="Marketing Digital">Marketing Digital</option>
+                        <option value="E-commerce">E-commerce</option>
+                        <option value="Startups">Startups</option>
+                        <option value="Grandes Empresas">Grandes Empresas</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="period-filter" class="block text-sm font-medium text-slate-600 mb-2">Filtrar por Período</label>
+                    <select id="period-filter" class="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-amber-500 focus:border-amber-500">
+                        <option value="90">Últimos 90 días</option>
+                        <option value="60">Últimos 60 días</option>
+                        <option value="30">Últimos 30 días</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <main class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-bold mb-1 text-slate-700">Leads por Segmento</h3>
+                <p class="text-sm text-slate-500 mb-4">Distribución de los leads capturados según su área de interés principal.</p>
+                <div class="chart-container">
+                    <canvas id="leadsBySegmentChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-bold mb-1 text-slate-700">Evolución del Lead Scoring Promedio</h3>
+                <p class="text-sm text-slate-500 mb-4">Tendencia del puntaje promedio de los leads a lo largo del tiempo.</p>
+                <div class="chart-container">
+                    <canvas id="leadScoringChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-bold mb-1 text-slate-700">Comportamiento de Correos</h3>
+                <p class="text-sm text-slate-500 mb-4">Rendimiento de las últimas campañas de email marketing.</p>
+                <div class="chart-container">
+                    <canvas id="emailBehaviorChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-bold mb-1 text-slate-700">Embudo de Conversión</h3>
+                <p class="text-sm text-slate-500 mb-4">Avance de los leads a través de las etapas clave del embudo de ventas.</p>
+                <div id="funnel-container" class="flex flex-col items-center justify-center h-full space-y-1 mt-4">
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <script>
+        const MOCK_DATA = {
+            leads: [],
+            campaigns: [
+                { id: 1, name: 'Bienvenida', sent: 1000, opens: 600, clicks: 150 },
+                { id: 2, name: 'Contenido #1', sent: 950, opens: 550, clicks: 120 },
+                { id: 3, name: 'Oferta Especial', sent: 900, opens: 650, clicks: 250 },
+                { id: 4, name: 'Último Aviso', sent: 800, opens: 400, clicks: 100 },
+            ],
+            funnel: {
+                'all': { visits: 5000, leads: 1200, mql: 400, sql: 150, closed: 50 },
+                'Marketing Digital': { visits: 1500, leads: 400, mql: 150, sql: 60, closed: 25 },
+                'E-commerce': { visits: 1200, leads: 300, mql: 100, sql: 40, closed: 10 },
+                'Startups': { visits: 1300, leads: 350, mql: 110, sql: 35, closed: 10 },
+                'Grandes Empresas': { visits: 1000, leads: 150, mql: 40, sql: 15, closed: 5 },
+            }
+        };
+
+        const segments = ['Marketing Digital', 'E-commerce', 'Startups', 'Grandes Empresas'];
+        function generateLeads() {
+            for (let i = 0; i < 1200; i++) {
+                const leadDate = new Date();
+                leadDate.setDate(leadDate.getDate() - Math.floor(Math.random() * 90));
+                MOCK_DATA.leads.push({
+                    id: i,
+                    segment: segments[Math.floor(Math.random() * segments.length)],
+                    date: leadDate,
+                    scoringHistory: Array.from({ length: 12 }, (_, month) => ({
+                        month: month + 1,
+                        score: Math.floor(Math.random() * 80) + 10,
+                    }))
+                });
+            }
+        }
+        generateLeads();
+        
+        const chartInstances = {};
+
+        function filterData() {
+            const segmentFilter = document.getElementById('segment-filter').value;
+            const periodFilter = parseInt(document.getElementById('period-filter').value);
+
+            const now = new Date();
+            const periodCutoff = new Date();
+            periodCutoff.setDate(now.getDate() - periodFilter);
+
+            let filteredLeads = MOCK_DATA.leads.filter(lead => lead.date >= periodCutoff);
+
+            if (segmentFilter !== 'all') {
+                filteredLeads = filteredLeads.filter(lead => lead.segment === segmentFilter);
+            }
+            
+            return {
+                leads: filteredLeads,
+                funnelData: MOCK_DATA.funnel[segmentFilter] || MOCK_DATA.funnel['all'],
+            };
+        }
+        
+        function renderLeadsBySegmentChart(leads) {
+            const ctx = document.getElementById('leadsBySegmentChart').getContext('2d');
+            const segmentCounts = segments.reduce((acc, segment) => {
+                acc[segment] = 0;
+                return acc;
+            }, {});
+
+            leads.forEach(lead => {
+                if(segmentCounts[lead.segment] !== undefined) {
+                    segmentCounts[lead.segment]++;
+                }
+            });
+            
+            const data = {
+                labels: Object.keys(segmentCounts),
+                datasets: [{
+                    data: Object.values(segmentCounts),
+                    backgroundColor: ['#f59e0b', '#10b981', '#3b82f6', '#6366f1'],
+                    borderColor: '#f1f5f9',
+                    borderWidth: 4,
+                    hoverOffset: 4
+                }]
+            };
+
+            if (chartInstances.leadsBySegment) chartInstances.leadsBySegment.destroy();
+            chartInstances.leadsBySegment = new Chart(ctx, {
+                type: 'doughnut',
+                data: data,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+
+        function renderLeadScoringChart(leads, period) {
+            const ctx = document.getElementById('leadScoringChart').getContext('2d');
+            const totalMonths = Math.ceil(period / 30);
+            const labels = Array.from({length: totalMonths}, (_, i) => {
+                const d = new Date();
+                d.setMonth(d.getMonth() - (totalMonths - 1 - i));
+                return d.toLocaleString('es-ES', { month: 'short' });
+            });
+
+            const avgScores = Array(totalMonths).fill(0);
+            const leadsCountPerMonth = Array(totalMonths).fill(0);
+
+            leads.forEach(lead => {
+                const leadMonthIndex = Math.floor((new Date() - lead.date) / (1000 * 60 * 60 * 24 * 30));
+                 if (leadMonthIndex < totalMonths) {
+                    const index = totalMonths - 1 - leadMonthIndex;
+                    avgScores[index] += lead.scoringHistory.reduce((a,b) => a + b.score, 0) / 12; // Simplified average
+                    leadsCountPerMonth[index]++;
+                }
+            });
+
+            const finalScores = avgScores.map((score, index) => leadsCountPerMonth[index] > 0 ? score / leadsCountPerMonth[index] : 0);
+
+            const data = {
+                labels: labels,
+                datasets: [{
+                    label: 'Lead Scoring Promedio',
+                    data: finalScores,
+                    fill: true,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    tension: 0.3,
+                    pointBackgroundColor: '#f59e0b',
+                }]
+            };
+
+            if (chartInstances.leadScoring) chartInstances.leadScoring.destroy();
+            chartInstances.leadScoring = new Chart(ctx, {
+                type: 'line',
+                data: data,
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        function renderEmailBehaviorChart() {
+            const ctx = document.getElementById('emailBehaviorChart').getContext('2d');
+            const data = {
+                labels: MOCK_DATA.campaigns.map(c => c.name),
+                datasets: [
+                    {
+                        label: 'Enviados',
+                        data: MOCK_DATA.campaigns.map(c => c.sent),
+                        backgroundColor: '#64748b',
+                    },
+                    {
+                        label: 'Aperturas',
+                        data: MOCK_DATA.campaigns.map(c => c.opens),
+                        backgroundColor: '#3b82f6',
+                    },
+                    {
+                        label: 'Clics',
+                        data: MOCK_DATA.campaigns.map(c => c.clicks),
+                        backgroundColor: '#f59e0b',
+                    }
+                ]
+            };
+            if (chartInstances.emailBehavior) chartInstances.emailBehavior.destroy();
+            chartInstances.emailBehavior = new Chart(ctx, {
+                type: 'bar',
+                data: data,
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { stacked: false }, y: { stacked: false } } }
+            });
+        }
+
+        function renderFunnel(funnelData) {
+            const container = document.getElementById('funnel-container');
+            container.innerHTML = '';
+            const funnelStages = [
+                { name: 'Visitantes', value: funnelData.visits, color: 'bg-slate-500' },
+                { name: 'Leads (Nuevos)', value: funnelData.leads, color: 'bg-blue-500' },
+                { name: 'MQL (Marketing Qualified)', value: funnelData.mql, color: 'bg-sky-500' },
+                { name: 'SQL (Sales Qualified)', value: funnelData.sql, color: 'bg-indigo-500' },
+                { name: 'Clientes (Cerrados)', value: funnelData.closed, color: 'bg-amber-500' }
+            ];
+
+            const maxVal = funnelStages[0].value;
+
+            funnelStages.forEach((stage, index) => {
+                const prevValue = index > 0 ? funnelStages[index - 1].value : stage.value;
+                const conversionRate = prevValue > 0 ? ((stage.value / prevValue) * 100).toFixed(1) : 0;
+                const widthPercentage = (stage.value / maxVal) * 100;
+
+                const segmentEl = document.createElement('div');
+                segmentEl.className = `funnel-segment ${stage.color} text-white p-2 text-center transition-all duration-300 ease-in-out`;
+                segmentEl.style.width = `${Math.max(widthPercentage, 20)}%`; // Min width
+                segmentEl.innerHTML = `
+                    <div class="font-bold">${stage.name}: ${stage.value.toLocaleString('es-ES')}</div>
+                    ${index > 0 ? `<div class="text-xs opacity-80">Conversión: ${conversionRate}%</div>` : ''}
+                `;
+                container.appendChild(segmentEl);
+            });
+        }
+
+        function updateDashboard() {
+            const { leads, funnelData } = filterData();
+            const period = parseInt(document.getElementById('period-filter').value);
+            renderLeadsBySegmentChart(leads);
+            renderLeadScoringChart(leads, period);
+            renderEmailBehaviorChart(); // Not filtered for simplicity
+            renderFunnel(funnelData);
+        }
+        
+        document.getElementById('segment-filter').addEventListener('change', updateDashboard);
+        document.getElementById('period-filter').addEventListener('change', updateDashboard);
+
+        document.addEventListener('DOMContentLoaded', updateDashboard);
+    </script>
+</body>
+</html>
